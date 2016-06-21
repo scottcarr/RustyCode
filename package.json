@@ -46,6 +46,11 @@
         "description": "Compile the current example"
       },
       {
+        "command": "rust.cargo.rustc.debug",
+        "title": "Cargo: Rustc Debug",
+        "description": "Compile the current package"
+      },
+      {
         "command": "rust.cargo.build.example.release",
         "title": "Cargo: Build example, Release",
         "description": "Compile the current example with \"--release\" flag"

@@ -120,6 +120,13 @@ export default class CommandService {
             this.runCargo(args, true, true);
         });
     }
+    public static formatCommandJSON(commandName: string, ...args: string[]): vscode.Disposable {
+        let json_args = ["--", "--error-format", "json", "-Z", "unstable-options"];
+        args = args.concat(json_args);
+        return vscode.commands.registerCommand(commandName, () => {
+            this.runCargoJSON(args, true, true);
+        });
+    }
 
     public static buildExampleCommand(commandName: string, release: boolean): vscode.Disposable {
         return vscode.commands.registerCommand(commandName, () => {
@@ -181,6 +188,18 @@ export default class CommandService {
             args.push('--release');
         }
         this.runCargo(args, true, true);
+    }
+    private static parseDiagnosticsJSON(cwd: string, output: string): void {
+        //let idx = output.indexOf("\n");
+        //let err = output.substr(idx+1);
+        let errs = output.split("\n");
+        let parsed = JSON.parse(errs[1]);
+        this.channel.append(this.currentTask, "\n****begin JSON****\n");
+        let msg = vscode.workspace.rootPath + "/" + parsed["spans"][0]["file_name"];
+        // if you put file:// before the file name the clicking stops working!
+        msg = msg + "(" + parsed["spans"][0]["line_start"] + "," +parsed["spans"][0]["column_start"] +")";
+        this.channel.append(this.currentTask, msg);
+        //vscode.languages.createDiagnosticCollection("rust");
     }
 
     private static parseDiagnostics(cwd: string, output: string): void {
@@ -259,6 +278,38 @@ export default class CommandService {
                     this.parseDiagnostics(value, output);
                 }, output => {
                     this.parseDiagnostics(value, output);
+                }).then(() => {
+                    this.currentTask = null;
+                });
+            } else {
+                vscode.window.showErrorMessage(value.message);
+            }
+        });
+    }
+    private static runCargoJSON(args: string[], force = false, visible = false): void {
+        if (force && this.currentTask) {
+            this.channel.setOwner(null);
+            this.currentTask.kill().then(() => {
+                this.runCargoJSON(args, force, visible);
+            });
+            return;
+        } else if (this.currentTask) {
+            return;
+        }
+        
+        this.currentTask = new CargoTask(args, this.channel);
+
+        if (visible) {
+            this.channel.setOwner(this.currentTask);
+            this.channel.show();
+        }
+
+        CommandService.cwd().then((value: string | Error) => {
+            if (typeof value === 'string') {
+                this.currentTask.execute(value).then(output => {
+                    this.parseDiagnosticsJSON(value, output);
+                }, output => {
+                    this.parseDiagnosticsJSON(value, output);
                 }).then(() => {
                     this.currentTask = null;
                 });
