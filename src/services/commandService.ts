@@ -57,12 +57,56 @@ class CargoTask {
         this.interrupted = false;
     }
 
+    private outputDiagnostic(json: any) {
+        try {
+            let file_link = vscode.workspace.rootPath + "/" + json["spans"][0]["file_name"];
+            // if you put file:// before the file name the clicking stops working!
+            file_link = file_link + "(" + json["spans"][0]["line_start"] + "," + json["spans"][0]["column_start"] + ")\n";
+            this.channel.append(this, file_link);
+        } catch (e) {
+            if (e instanceof TypeError) { }
+            else { throw e; }
+        }
+        let msg = json["level"] + ": " + json["message"] + "\n";
+        this.channel.append(this, msg);
+        for (let s of json["spans"]) {
+            for (let t of s["text"]) {
+                let text = t["text"] + "\n";
+                this.channel.append(this, text);
+                let hi_start = t["highlight_start"];
+                let hi_end = t["highlight_end"];
+                let hi = ' '.repeat(hi_start - 1);
+                hi = hi + '^'.repeat(hi_end - hi_start) + "\n";
+                this.channel.append(this, hi);
+            }
+        }
+
+        for (let child of json["children"]) {
+            this.outputDiagnostic(child)
+        }
+    }
+
+    private tryParseDiagnosticsJSON(line: string): boolean {
+        try {
+            let parsed = JSON.parse(line);
+            this.outputDiagnostic(parsed);
+            return true;
+        } catch (e) {
+            if (e instanceof SyntaxError) {
+                return false
+            } else {
+                throw e;
+            }
+        }
+    }
+
     public execute(cwd: string): Thenable<string> {
         return new Promise((resolve, reject) => {
             const cargoPath = PathService.getCargoPath();
             const startTime = Date.now();
             const task = 'cargo ' + this.arguments.join(' ');
             let output = '';
+            let unprocessed = '';
 
             this.channel.clear(this);
             this.channel.append(this, `Running "${task}":\n`);
@@ -74,7 +118,17 @@ class CargoTask {
             });
             this.process.stderr.on('data', data => {
                 output += data.toString();
-                this.channel.append(this, data.toString());
+                unprocessed += data.toString();
+                while (unprocessed.indexOf("\n") != -1) {
+                    let nl_idx = unprocessed.indexOf("\n");
+                    let line = unprocessed.substring(0, nl_idx);
+                    unprocessed = unprocessed.slice(nl_idx+1);
+                    if (line.startsWith("{") && this.tryParseDiagnosticsJSON(line)) {
+
+                    } else {
+                        this.channel.append(this, line + "\n");
+                    }
+                }
             });
             this.process.on('error', error => {
                 if (error.code === 'ENOENT') {
@@ -189,52 +243,6 @@ export default class CommandService {
         }
         this.runCargo(args, true, true);
     }
-    private static outputDiagnostic(json: any) {   
-        try {
-            let file_link = vscode.workspace.rootPath + "/" + json["spans"][0]["file_name"];
-            // if you put file:// before the file name the clicking stops working!
-            file_link = file_link + "(" + json["spans"][0]["line_start"] + "," + json["spans"][0]["column_start"] + ")\n";
-            this.channel.append(this.currentTask, file_link);
-        } catch (e) {
-            if (e instanceof TypeError) {}
-            else { throw e; }
-        }
-        let msg = json["level"] + ": " + json["message"] + "\n";
-        this.channel.append(this.currentTask, msg);
-        for (let s of json["spans"]) {
-            for (let t of s["text"]) {
-                let text = t["text"] + "\n";
-                this.channel.append(this.currentTask, text);
-                let hi_start = t["highlight_start"];
-                let hi_end = t["highlight_end"];
-                let hi = ' '.repeat(hi_start - 1);
-                hi = hi + '^'.repeat(hi_end - hi_start) + "\n";
-                this.channel.append(this.currentTask, hi);
-            }
-        }
-
-        for (let child of json["children"]) {
-            this.outputDiagnostic(child)
-        }
-    }
-    private static parseDiagnosticsJSON(cwd: string, output: string): void {
-        //let idx = output.indexOf("\n");
-        //let err = output.substr(idx+1);
-        this.channel.append(this.currentTask, "\n****begin JSON****\n");
-        for (let err of output.split("\n")) {
-            try {
-                let parsed = JSON.parse(err);
-                this.outputDiagnostic(parsed);
-             } catch (e) { 
-                if (e instanceof SyntaxError) { 
-
-                } else {
-                    throw e;
-                }
-
-             }
-        }
-    }
 
     private static parseDiagnostics(cwd: string, output: string): void {
         let errors: { [filename: string]: RustError[] } = {};
@@ -341,9 +349,9 @@ export default class CommandService {
         CommandService.cwd().then((value: string | Error) => {
             if (typeof value === 'string') {
                 this.currentTask.execute(value).then(output => {
-                    this.parseDiagnosticsJSON(value, output);
+                    this.parseDiagnostics(value, output);
                 }, output => {
-                    this.parseDiagnosticsJSON(value, output);
+                    this.parseDiagnostics(value, output);
                 }).then(() => {
                     this.currentTask = null;
                 });
