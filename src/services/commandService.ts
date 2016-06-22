@@ -189,17 +189,51 @@ export default class CommandService {
         }
         this.runCargo(args, true, true);
     }
+    private static outputDiagnostic(json: any) {   
+        try {
+            let file_link = vscode.workspace.rootPath + "/" + json["spans"][0]["file_name"];
+            // if you put file:// before the file name the clicking stops working!
+            file_link = file_link + "(" + json["spans"][0]["line_start"] + "," + json["spans"][0]["column_start"] + ")\n";
+            this.channel.append(this.currentTask, file_link);
+        } catch (e) {
+            if (e instanceof TypeError) {}
+            else { throw e; }
+        }
+        let msg = json["level"] + ": " + json["message"] + "\n";
+        this.channel.append(this.currentTask, msg);
+        for (let s of json["spans"]) {
+            for (let t of s["text"]) {
+                let text = t["text"] + "\n";
+                this.channel.append(this.currentTask, text);
+                let hi_start = t["highlight_start"];
+                let hi_end = t["highlight_end"];
+                let hi = ' '.repeat(hi_start - 1);
+                hi = hi + '^'.repeat(hi_end - hi_start) + "\n";
+                this.channel.append(this.currentTask, hi);
+            }
+        }
+
+        for (let child of json["children"]) {
+            this.outputDiagnostic(child)
+        }
+    }
     private static parseDiagnosticsJSON(cwd: string, output: string): void {
         //let idx = output.indexOf("\n");
         //let err = output.substr(idx+1);
-        let errs = output.split("\n");
-        let parsed = JSON.parse(errs[1]);
         this.channel.append(this.currentTask, "\n****begin JSON****\n");
-        let msg = vscode.workspace.rootPath + "/" + parsed["spans"][0]["file_name"];
-        // if you put file:// before the file name the clicking stops working!
-        msg = msg + "(" + parsed["spans"][0]["line_start"] + "," +parsed["spans"][0]["column_start"] +")";
-        this.channel.append(this.currentTask, msg);
-        //vscode.languages.createDiagnosticCollection("rust");
+        for (let err of output.split("\n")) {
+            try {
+                let parsed = JSON.parse(err);
+                this.outputDiagnostic(parsed);
+             } catch (e) { 
+                if (e instanceof SyntaxError) { 
+
+                } else {
+                    throw e;
+                }
+
+             }
+        }
     }
 
     private static parseDiagnostics(cwd: string, output: string): void {
