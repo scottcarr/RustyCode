@@ -52,6 +52,8 @@ class CargoTask {
     private arguments: string[];
     private interrupted: boolean;
     private useJSON: boolean
+    // i could just add a member thats a vector
+    // of the diagnostics we've accumulated on this Task
 
     constructor(args: string[], channel: ChannelWrapper, useJSON: boolean = false) {
         this.arguments = args;
