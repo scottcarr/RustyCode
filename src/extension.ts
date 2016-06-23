@@ -6,6 +6,8 @@ import StatusBarService from './services/statusBarService';
 import SuggestService from './services/suggestService';
 import PathService from './services/pathService';
 import CommandService from './services/commandService';
+// import {IConnection, createConnection, IPCMessageReader, IPCMessageWriter, } from 'vscode-languageserver';
+// import {LanguageClient, ServerOptions} from 'vscode-languageclient';
 
 export function activate(ctx: vscode.ExtensionContext): void {
     // Set path to Rust language sources
@@ -13,7 +15,7 @@ export function activate(ctx: vscode.ExtensionContext): void {
     if (rustSrcPath) {
         process.env['RUST_SRC_PATH'] = rustSrcPath;
     }
-
+    
     // Initialize suggestion service
     let suggestService = new SuggestService();
     ctx.subscriptions.push(suggestService.start());

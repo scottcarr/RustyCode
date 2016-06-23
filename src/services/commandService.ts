@@ -4,6 +4,7 @@ import * as path from 'path';
 import kill = require('tree-kill');
 import findUp = require('find-up');
 import PathService from './pathService';
+//import {IConnection} from 'vscode-languageserver';
 
 const errorRegex = /^(.*):(\d+):(\d+):\s+(\d+):(\d+)\s+(warning|error|note|help):\s+(.*)$/;
 
@@ -50,14 +51,19 @@ class CargoTask {
     private process: cp.ChildProcess;
     private arguments: string[];
     private interrupted: boolean;
+    private useJSON: boolean
 
-    constructor(args: string[], channel: ChannelWrapper) {
+    constructor(args: string[], channel: ChannelWrapper, useJSON: boolean = false) {
         this.arguments = args;
         this.channel = channel;
         this.interrupted = false;
+        this.useJSON = useJSON;
     }
 
     private outputDiagnostic(json: any) {
+        // my way is actually somewhat worse because
+        // the diagnostics never get added to vscode's diagnostics
+        // use this.diagonstics.set(uri, diagnostics[])
         try {
             let file_link = vscode.workspace.rootPath + "/" + json["spans"][0]["file_name"];
             // if you put file:// before the file name the clicking stops working!
@@ -119,7 +125,7 @@ class CargoTask {
             this.process.stderr.on('data', data => {
                 output += data.toString();
                 unprocessed += data.toString();
-                while (unprocessed.indexOf("\n") != -1) {
+                while (this.useJSON && unprocessed.indexOf("\n") != -1) {
                     let nl_idx = unprocessed.indexOf("\n");
                     let line = unprocessed.substring(0, nl_idx);
                     unprocessed = unprocessed.slice(nl_idx+1);
@@ -171,14 +177,14 @@ export default class CommandService {
 
     public static formatCommand(commandName: string, ...args: string[]): vscode.Disposable {
         return vscode.commands.registerCommand(commandName, () => {
-            this.runCargo(args, true, true);
+            this.runCargo(args, true, true, false);
         });
     }
     public static formatCommandJSON(commandName: string, ...args: string[]): vscode.Disposable {
         let json_args = ["--", "--error-format", "json", "-Z", "unstable-options"];
         args = args.concat(json_args);
         return vscode.commands.registerCommand(commandName, () => {
-            this.runCargoJSON(args, true, true);
+            this.runCargo(args, true, true, true);
         });
     }
 
@@ -296,7 +302,7 @@ export default class CommandService {
         }
     }
 
-    private static runCargo(args: string[], force = false, visible = false): void {
+    private static runCargo(args: string[], force = false, visible = false, useJSON = false): void {
         if (force && this.currentTask) {
             this.channel.setOwner(null);
             this.currentTask.kill().then(() => {
@@ -307,39 +313,7 @@ export default class CommandService {
             return;
         }
 
-        this.currentTask = new CargoTask(args, this.channel);
-
-        if (visible) {
-            this.channel.setOwner(this.currentTask);
-            this.channel.show();
-        }
-
-        CommandService.cwd().then((value: string | Error) => {
-            if (typeof value === 'string') {
-                this.currentTask.execute(value).then(output => {
-                    this.parseDiagnostics(value, output);
-                }, output => {
-                    this.parseDiagnostics(value, output);
-                }).then(() => {
-                    this.currentTask = null;
-                });
-            } else {
-                vscode.window.showErrorMessage(value.message);
-            }
-        });
-    }
-    private static runCargoJSON(args: string[], force = false, visible = false): void {
-        if (force && this.currentTask) {
-            this.channel.setOwner(null);
-            this.currentTask.kill().then(() => {
-                this.runCargoJSON(args, force, visible);
-            });
-            return;
-        } else if (this.currentTask) {
-            return;
-        }
-        
-        this.currentTask = new CargoTask(args, this.channel);
+        this.currentTask = new CargoTask(args, this.channel, useJSON);
 
         if (visible) {
             this.channel.setOwner(this.currentTask);

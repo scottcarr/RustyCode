@@ -1,0 +1,43 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "0.1.0",
+    "command": "cargo",
+    "isShellCommand": true,
+    "args" : [ ],
+    // "args": [
+    //     "rustc",
+    //     "--",
+    //     "--error-format",
+    //     "json",
+    //     "-Z",
+    //     "unstable-options"
+    // ],
+    "showOutput": "always",
+    "tasks": [
+        {
+            "taskName": "build",
+            "isBuildCommand": true,
+            "isWatching": false,
+            "problemMatcher": {
+                    "owner": "rust",
+                    "fileLocation": ["relative", "${workspaceRoot}"],
+                    "pattern": {
+                        "regexp": "^(.*):(\\d+):(\\d+): (\\d+):(\\d+) (warning|error|note): (.*)$",
+                        "file": 1,
+                        "line": 2,
+                        "column": 3,
+                        "endLine": 4,
+                        "endColumn": 5,
+                        "severity": 6,
+                        "message": 7
+                        // "regexp": "^(.*):(\\d+):(\\d+)(.*)$",
+                        // "file" : 1,
+                        // "line" : 2,
+                        // "column" : 3,
+                        // "message" : 4
+                }
+            }
+        }
+    ]
+}
